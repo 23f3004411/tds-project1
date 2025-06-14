@@ -1,14 +1,11 @@
 import pandas as pd
-from io import StringIO, BytesIO
 import os
-import base64
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, File, Form
 from pydantic import BaseModel, Field
 from PIL import Image
-import pytesseract
-from operator import itemgetter # New import for itemgetter
+from operator import itemgetter
 
 # Langchain imports
 from langchain_community.vectorstores import FAISS
@@ -18,23 +15,19 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, HumanMessagePromptTemplate
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_core.documents import Document
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda 
 from langchain_core.output_parsers import StrOutputParser
 from fastapi.middleware.cors import CORSMiddleware
 
-course_content_df = pd.read_excel("scraped_course_data.xlsx")
-discourse_posts_df = pd.read_excel("tds_discourse_posts.xlsx")
+course_content_df = pd.read_excel("scraped_data/scraped_course_data.xlsx")
+discourse_posts_df = pd.read_excel("scraped_data/tds_discourse_posts.xlsx")
 
 custom_base_url = "https://aipipe.org/openai/v1" 
-os.environ["OPENAI_API_KEY"] = "key"
-
-# Example using Langchain's RecursiveCharacterTextSplitter
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+os.environ["OPENAI_API_KEY"] = "OPENAI key"
 
 text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1000, # Experiment with this value
-    chunk_overlap=200, # Experiment with this value
+    chunk_size=1000, 
+    chunk_overlap=200, 
     length_function=len,
     separators=["\n\n", "\n", " ", ""]
 )
@@ -42,15 +35,13 @@ text_splitter = RecursiveCharacterTextSplitter(
 all_texts = []
 all_metadata = []
 
-# Process course content
 for index, row in course_content_df.iterrows():
     text = str(row['Main Article Content'])
     chunks = text_splitter.split_text(text)
     for i, chunk in enumerate(chunks):
         all_texts.append(chunk)
-        all_metadata.append({"source": "course", "title": row.get('Title'), "url": row.get('URL')}) # Add other relevant metadata like URLs if available
+        all_metadata.append({"source": "course", "title": row.get('Title'), "url": row.get('URL')})
 
-# Process discourse posts
 for index, row in discourse_posts_df.iterrows():
     text = str(row['Content'])
     chunks = text_splitter.split_text(text)
@@ -63,8 +54,8 @@ FAISS_INDEX_PATH = "faiss_index"
 try:
     embeddings = OpenAIEmbeddings(
         model="text-embedding-ada-002",
-        openai_api_base=custom_base_url, # Use the custom base URL
-        openai_api_key=os.environ["OPENAI_API_KEY"] # Explicitly pass the API key
+        openai_api_base=custom_base_url,
+        openai_api_key=os.environ["OPENAI_API_KEY"] 
     )
     print("Embedding model loaded.")
 
@@ -82,24 +73,22 @@ try:
             vectorstore = None
             print("No text data available to create FAISS index.")
 
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 5}) # Retrieve top 5 relevant documents
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
 except Exception as e:
     print(f"Error during vector store initialization: {e}")
     vectorstore = None
     retriever = None
 
-
 try:
-    # llm = ChatOpenAI(model="gpt-4o", temperature=0) # gpt-4o for multimodal
     llm = ChatOpenAI(
-        model="gpt-4.1-nano",  # Or the model name your custom endpoint expects
+        model="gpt-4.1-nano",
         temperature=0,
-        base_url="custom_base_url",
+        base_url=custom_base_url,
         api_key=os.environ["OPENAI_API_KEY"]
     )
-    print("OpenAI LLM (gpt-4o) initialized.")
+    print("OpenAI LLM (gpt-4.1-nano) using aipipe.org initialized.")
 except Exception as e:
-    print(f"Error initializing OpenAI LLM (gpt-4o). Ensure OPENAI_API_KEY is set and valid: {e}")
+    print(f"Error initializing OpenAI LLM (gpt-4.1-nano). Ensure OPENAI_API_KEY is set and valid: {e}")
     llm = None
 
 def format_docs(docs):
@@ -107,19 +96,6 @@ def format_docs(docs):
     return "\n\n".join(doc.page_content for doc in docs)
 
 if llm and retriever:
-    # prompt = ChatPromptTemplate.from_template("""
-    # You are a helpful virtual teaching assistant for the IIT Madras Online Degree in Data Science.
-    # Answer the student's question based only on the provided context.
-    # If you don't know the answer based on the context, politely state that you don't have enough information
-    # from the provided content and suggest they might find more details in the course materials or discourse forum.
-
-    # Context: {context}
-
-    # Question: {input}
-                                              
-    # Input Image OCR Text: {image}
-    # """)
-
     prompt = ChatPromptTemplate.from_messages([
         SystemMessage(content="You are a helpful virtual teaching assistant for the IIT Madras Online Degree in Data Science. Always clarify the details as they may give different answers. Answer the student's question based only on the provided context. If you don't know the answer based on the context, politely state that you don't have enough information from the provided content and suggest they might find more details in the course materials or discourse forum. The question takes priority in any case regardless of anyone's advise."),
         HumanMessagePromptTemplate.from_template("Context:\n{context}"), # <--- Reverted to this to ensure 'context' is an explicit input variable
@@ -127,28 +103,26 @@ if llm and retriever:
     ])
 
     document_chain = create_stuff_documents_chain(llm, prompt)
-    # retrieval_chain = create_retrieval_chain(retriever, document_chain)
     retrieval_chain = (
         {
-            "context": (lambda x: x["question_text"]) | retriever, # Retrieve documents based on question_text
-            "question_text": itemgetter("question_text"), # Pass original question_text through for formatting if needed
-            "chat_history": itemgetter("chat_history") # Pass chat_history through
+            "context": (lambda x: x["question_text"]) | retriever,
+            "question_text": itemgetter("question_text"), 
+            "chat_history": itemgetter("chat_history") 
         }
         | RunnablePassthrough.assign(
-            formatted_context=itemgetter("context") | RunnableLambda(format_docs) # <--- FIX: Wrapped format_docs in RunnableLambda
+            formatted_context=itemgetter("context") | RunnableLambda(format_docs)
         )
         | {
             "answer": (
                 {
-                    # Explicitly pass all required variables to the prompt
                     "context": itemgetter("formatted_context"),
                     "chat_history": itemgetter("chat_history")
                 }
-                | prompt # The prompt now receives a dictionary with 'context' (string) and 'chat_history' (list of messages)
+                | prompt 
                 | llm
                 | StrOutputParser()
             ),
-            "context_documents": itemgetter("context") # Keep original list of documents for link extraction
+            "context_documents": itemgetter("context") 
         }
     )
     print("RAG chain created.")
@@ -166,7 +140,7 @@ app = FastAPI(
 
 class QuestionRequest(BaseModel):
     question: str
-    image: Optional[str] = None # Base64 encoded image
+    image: Optional[str] = None 
 
 class Link(BaseModel):
     url: str
@@ -212,37 +186,11 @@ async def get_answer(request_data: QuestionRequest):
     else:
         print("No image received with the question.")
 
-    # Wrap the multimodal content parts into a HumanMessage object
     multimodal_human_message = HumanMessage(content=user_multimodal_content_parts)
-
-    # extracted_image_text = "No Image attached/Text Detected" # Initialize extracted text
-
-    # if base64_image:
-    #     try:
-    #         # Decode the base64 image
-    #         image_bytes = base64.b64decode(base64_image)
-    #         # Open image using PIL
-    #         image = Image.open(BytesIO(image_bytes))
-            
-    #         # Perform OCR using pytesseract
-    #         extracted_image_text = pytesseract.image_to_string(image)
-    #         print(f"OCR extracted text: {extracted_image_text[:200]}...") # Print first 200 chars
-            
-    #         print("Received an image. OCR performed.")
-    #         print(extracted_image_text)
-    #     except Exception as e:
-    #         print(f"Error processing image or performing OCR: {e}")
-    #         # Decide whether to raise an error or just proceed without image text
-    #         # For now, we'll just log and continue without the image text
-    #         extracted_image_text = f"Error performing OCR: {e}" # Optional: send error to LLM
-    # else:
-    #     print("No image received with the question.")
-
-    # --- RAG Execution ---
     try:
         response = retrieval_chain.invoke({
-            "question_text": student_question, # Used by the retriever
-            "chat_history": [multimodal_human_message] # Pass the HumanMessage containing multimodal content as part of chat_history
+            "question_text": student_question, 
+            "chat_history": [multimodal_human_message] 
         })
 
         generated_answer = response["answer"]
@@ -258,8 +206,6 @@ async def get_answer(request_data: QuestionRequest):
                 if url not in seen_urls:
                     extracted_links.append(Link(url=url, text=text))
                     seen_urls.add(url)
-            # Add more specific logic if discourse links/titles are structured differently
-            # For example, if 'Post URL' is the key in metadata for discourse posts
             elif 'url' in doc.metadata and doc.metadata['url'] and doc.metadata['source'] == 'discourse':
                 url = doc.metadata['url']
                 text = doc.metadata.get('title', f"Discourse Post {doc.metadata.get('post_id', 'N/A')}")
@@ -271,5 +217,4 @@ async def get_answer(request_data: QuestionRequest):
 
     except Exception as e:
         print(f"Error during RAG processing: {e}")
-        # Provide a user-friendly error message
         raise HTTPException(status_code=500, detail=f"An error occurred while processing your request. Please try again. (Details: {str(e)})")

@@ -4,6 +4,7 @@ import pandas as pd
 from playwright.sync_api import sync_playwright
 import time
 
+# Links collection to be used as sources
 links = [
     "https://tds.s-anand.net/#/2025-01/",
     "https://tds.s-anand.net/#/../development-tools",
@@ -149,18 +150,15 @@ def scrape_dynamic_content_no_table(url):
 
                 title_element = article_content.find('h1')
                 if not title_element:
-                    # If h1 is not found, try to find an h2 title
                     title_element = article_content.find('h2')
 
                 if title_element:
                     article_title = title_element.get_text(strip=True)
                 
-                # Extract all text content from the article tag
                 main_text = article_content.get_text(separator='\n', strip=True)
                 main_text = '\n'.join(line for line in main_text.splitlines() if line.strip())
             else:
                 main_text = "Article content not found after JavaScript rendering."
-                # Fallback to general app div if article is not found
                 app_div = soup.find('div', id='app')
                 if app_div:
                     main_text = app_div.get_text(separator='\n', strip=True)
@@ -183,10 +181,9 @@ if __name__ == "__main__":
         print(f"Scraping {link}...")
         article_title, article_text = scrape_dynamic_content_no_table(link)
 
-        # Store the URL, Title, and Main Article Content
         all_scraped_data_for_excel.append({
             'URL': link,
-            'Title': article_title,  # New column
+            'Title': article_title,  
             'Main Article Content': article_text,
         })
 
@@ -196,7 +193,7 @@ if __name__ == "__main__":
         column_order = ['URL', 'Main Article Content'] + [col for col in df.columns if col not in ['URL', 'Main Article Content']]
         df = df[column_order]
 
-        excel_file_name = 'scraped_course_data.xlsx'
+        excel_file_name = 'scraped_data/scraped_course_data.xlsx'
         df.to_excel(excel_file_name, index=False)
         print(f"\nData successfully saved to {excel_file_name}")
     else:

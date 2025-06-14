@@ -5,7 +5,6 @@ from datetime import datetime
 def create_session_with_browser_cookies(discourse_url, cookies):
     session = requests.Session()
     
-    # Add each cookie to the session
     for name, value in cookies.items():
         session.cookies.set(name, value, domain=discourse_url.split('//')[1])
     
@@ -33,7 +32,7 @@ def get_discourse_posts_and_responses(session, discourse_url, category_id, start
         
         response = session.get(topics_url, params=params)
         if response.status_code == 200:
-            response.raise_for_status()  # Raise an HTTPError for bad responses (4xx or 5xx)
+            response.raise_for_status()  
             topics_data = response.json() 
         else:
             print(f"Failed to get topics: {response.status_code}")
@@ -41,18 +40,15 @@ def get_discourse_posts_and_responses(session, discourse_url, category_id, start
         topics = topics_data.get('topic_list', {}).get('topics', [])
 
         if not topics:
-            break  # No more topics
+            break 
 
-        found_new_posts = False
         for topic in topics:
             topic_created_at_str = topic.get('created_at')
             print(topic_created_at_str)
             if topic_created_at_str:
                 topic_created_at = datetime.strptime(topic_created_at_str.split('T')[0], '%Y-%m-%d')
                 
-                # Check if the topic is within the desired date range
                 if start_dt <= topic_created_at <= end_dt:
-                    found_new_posts = True
                     topic_id = topic.get('id')
                     topic_slug = topic.get('slug')
                     
@@ -77,7 +73,6 @@ def get_discourse_posts_and_responses(session, discourse_url, category_id, start
                         except requests.exceptions.RequestException as e:
                             print(f"Error fetching posts for topic {topic_id}: {e}")
                 elif topic_created_at > end_dt:
-                    # If we've passed the end date, we can stop
                     break 
 
 
@@ -85,7 +80,7 @@ def get_discourse_posts_and_responses(session, discourse_url, category_id, start
 
     return all_posts_data
 
-def save_to_excel(data, filename="tds_discourse_posts.xlsx"):
+def save_to_excel(data, filename="scraped_data/tds_discourse_posts.xlsx"):
     """
     Saves the extracted data into an Excel spreadsheet.
     """
@@ -114,32 +109,25 @@ def save_to_excel(data, filename="tds_discourse_posts.xlsx"):
 # IIT Madras BS Program Discourse URL
 DISCOURSE_URL = "https://discourse.onlinedegree.iitm.ac.in"
 
-# Cookies extracted from browser
 browser_cookies = {
     '_t': '_t',
     '_forum_session': '_forum_session'
-    # Add any other relevant cookies you found
 }
 
-# Create authenticated session
 session = create_session_with_browser_cookies(DISCOURSE_URL, browser_cookies)
 
-# Verify authentication
 response = session.get(f"{DISCOURSE_URL}/session/current.json")
 if response.status_code == 200:
     user_data = response.json()
     print(f"Authenticated as: {user_data['current_user']['username']}")
     print(f"Successfully connected to IIT Madras BS Program forum")
 
-    # Define the date range
     start_date = "2025-01-01"
     end_date = "2025-04-14"
-    category_id = 34 # Code 34 for TDS Discourse
+    category_id = 34 
 
-    # Get posts and responses
     posts_and_responses = get_discourse_posts_and_responses(session, DISCOURSE_URL, category_id, start_date, end_date)
 
-    # Save to Excel
     if posts_and_responses:
         save_to_excel(posts_and_responses)
     else:
