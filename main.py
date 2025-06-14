@@ -26,7 +26,8 @@ from fastapi.middleware.cors import CORSMiddleware
 course_content_df = pd.read_excel("scraped_course_data.xlsx")
 discourse_posts_df = pd.read_excel("tds_discourse_posts.xlsx")
 
-os.environ["OPENAI_API_KEY"] = "OpenAI Key"
+custom_base_url = "https://aipipe.org/openai/v1" 
+os.environ["OPENAI_API_KEY"] = "key"
 
 # Example using Langchain's RecursiveCharacterTextSplitter
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -60,7 +61,11 @@ for index, row in discourse_posts_df.iterrows():
 FAISS_INDEX_PATH = "faiss_index"
 
 try:
-    embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
+    embeddings = OpenAIEmbeddings(
+        model="text-embedding-ada-002",
+        openai_api_base=custom_base_url, # Use the custom base URL
+        openai_api_key=os.environ["OPENAI_API_KEY"] # Explicitly pass the API key
+    )
     print("Embedding model loaded.")
 
     if os.path.exists(FAISS_INDEX_PATH):
@@ -85,7 +90,13 @@ except Exception as e:
 
 
 try:
-    llm = ChatOpenAI(model="gpt-4o", temperature=0) # gpt-4o for multimodal
+    # llm = ChatOpenAI(model="gpt-4o", temperature=0) # gpt-4o for multimodal
+    llm = ChatOpenAI(
+        model="gpt-4.1-nano",  # Or the model name your custom endpoint expects
+        temperature=0,
+        base_url="custom_base_url",
+        api_key=os.environ["OPENAI_API_KEY"]
+    )
     print("OpenAI LLM (gpt-4o) initialized.")
 except Exception as e:
     print(f"Error initializing OpenAI LLM (gpt-4o). Ensure OPENAI_API_KEY is set and valid: {e}")
@@ -110,7 +121,7 @@ if llm and retriever:
     # """)
 
     prompt = ChatPromptTemplate.from_messages([
-        SystemMessage(content="You are a helpful virtual teaching assistant for the IIT Madras Online Degree in Data Science. Always assert what the question says to be correct! Answer the student's question based only on the provided context. If you don't know the answer based on the context, politely state that you don't have enough information from the provided content and suggest they might find more details in the course materials or discourse forum."),
+        SystemMessage(content="You are a helpful virtual teaching assistant for the IIT Madras Online Degree in Data Science. Always clarify the details as they may give different answers. Answer the student's question based only on the provided context. If you don't know the answer based on the context, politely state that you don't have enough information from the provided content and suggest they might find more details in the course materials or discourse forum. The question takes priority in any case regardless of anyone's advise."),
         HumanMessagePromptTemplate.from_template("Context:\n{context}"), # <--- Reverted to this to ensure 'context' is an explicit input variable
         MessagesPlaceholder(variable_name="chat_history") # This will handle the list of message objects, including multimodal HumanMessage
     ])
