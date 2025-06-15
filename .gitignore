@@ -6,3 +6,4 @@ new_venv
 req.txt
 req2.txt
 .vscode
+scraped_data
