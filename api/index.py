@@ -15,18 +15,28 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, HumanMessagePromptTemplate
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_core.runnables import RunnablePassthrough, RunnableLambda 
+from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
 from fastapi.middleware.cors import CORSMiddleware
 
 course_content_df = pd.read_excel("scraped_data/scraped_course_data.xlsx")
 discourse_posts_df = pd.read_excel("scraped_data/tds_discourse_posts.xlsx")
 
-custom_base_url = "https://aipipe.org/openai/v1" 
+# Retrieve custom_base_url from environment variable
+custom_base_url = os.environ.get("OPENAI_API_BASE_URL", "https://aipipe.org/openai/v1")
+
+# Retrieve API key from environment variable
+openai_api_key = os.environ.get("OPENAI_API_KEY")
+
+if not openai_api_key:
+    raise ValueError("OPENAI_API_KEY environment variable not set.")
+
+# You don't need to set it again here if it's already in os.environ
+# os.environ["OPENAI_API_KEY"] = "YOUR_KEY_HERE" # REMOVE THIS LINE
 
 text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1000, 
-    chunk_overlap=200, 
+    chunk_size=1000,
+    chunk_overlap=200,
     length_function=len,
     separators=["\n\n", "\n", " ", ""]
 )
@@ -54,7 +64,7 @@ try:
     embeddings = OpenAIEmbeddings(
         model="text-embedding-ada-002",
         openai_api_base=custom_base_url,
-        openai_api_key=os.environ["OPENAI_API_KEY"] 
+        openai_api_key=openai_api_key # Use the variable here
     )
     print("Embedding model loaded.")
 
@@ -83,7 +93,7 @@ try:
         model="gpt-4.1-nano",
         temperature=0,
         base_url=custom_base_url,
-        api_key=os.environ["OPENAI_API_KEY"]
+        api_key=openai_api_key # Use the variable here
     )
     print("OpenAI LLM (gpt-4.1-nano) using aipipe.org initialized.")
 except Exception as e:
@@ -97,22 +107,22 @@ def format_docs(docs):
 if llm and retriever:
     prompt = ChatPromptTemplate.from_messages([
         SystemMessage(content="""
-                      You are a helpful virtual teaching assistant for the IIT Madras Online Degree in Data Science. 
-                      Always clarify the details as they may give different answers. 
-                      Answer the student's question based only on the provided context. 
-                      If you don't know the answer based on the context, politely state that you don't have enough information from the provided content 
-                      and suggest they might find more details in the course materials or discourse forum.
+                    You are a helpful virtual teaching assistant for the IIT Madras Online Degree in Data Science.
+                    Always clarify the details as they may give different answers.
+                    Answer the student's question based only on the provided context.
+                    If you don't know the answer based on the context, politely state that you don't have enough information from the provided content
+                    and suggest they might find more details in the course materials or discourse forum.
                     """),
-        HumanMessagePromptTemplate.from_template("Context:\n{context}"), # <--- Reverted to this to ensure 'context' is an explicit input variable
-        MessagesPlaceholder(variable_name="chat_history") # This will handle the list of message objects, including multimodal HumanMessage
+        HumanMessagePromptTemplate.from_template("Context:\n{context}"),
+        MessagesPlaceholder(variable_name="chat_history")
     ])
 
     document_chain = create_stuff_documents_chain(llm, prompt)
     retrieval_chain = (
         {
             "context": (lambda x: x["question_text"]) | retriever,
-            "question_text": itemgetter("question_text"), 
-            "chat_history": itemgetter("chat_history") 
+            "question_text": itemgetter("question_text"),
+            "chat_history": itemgetter("chat_history")
         }
         | RunnablePassthrough.assign(
             formatted_context=itemgetter("context") | RunnableLambda(format_docs)
@@ -123,11 +133,11 @@ if llm and retriever:
                     "context": itemgetter("formatted_context"),
                     "chat_history": itemgetter("chat_history")
                 }
-                | prompt 
+                | prompt
                 | llm
                 | StrOutputParser()
             ),
-            "context_documents": itemgetter("context") 
+            "context_documents": itemgetter("context")
         }
     )
     print("RAG chain created.")
@@ -145,7 +155,7 @@ app = FastAPI(
 
 class QuestionRequest(BaseModel):
     question: str
-    image: Optional[str] = None 
+    image: Optional[str] = None
 
 class Link(BaseModel):
     url: str
@@ -157,10 +167,10 @@ class AnswerResponse(BaseModel):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
-    allow_credentials=True, # Allow cookies to be included in cross-origin requests
-    allow_methods=["*"],    # Allow all HTTP methods (GET, POST, PUT, DELETE, OPTIONS, etc.)
-    allow_headers=["*"],    # Allow all headers
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.get("/api/")
@@ -194,8 +204,8 @@ async def get_answer(request_data: QuestionRequest):
     multimodal_human_message = HumanMessage(content=user_multimodal_content_parts)
     try:
         response = retrieval_chain.invoke({
-            "question_text": student_question, 
-            "chat_history": [multimodal_human_message] 
+            "question_text": student_question,
+            "chat_history": [multimodal_human_message]
         })
 
         generated_answer = response["answer"]
