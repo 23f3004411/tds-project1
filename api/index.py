@@ -1,9 +1,8 @@
-import pandas as pd
 import os
 from typing import Optional, List
 
-from fastapi import FastAPI, HTTPException, File, Form
-from pydantic import BaseModel, Field
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 from PIL import Image
 from operator import itemgetter
 
@@ -14,13 +13,9 @@ from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, HumanMessagePromptTemplate
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
 from fastapi.middleware.cors import CORSMiddleware
-
-course_content_df = pd.read_excel("scraped_data/scraped_course_data.xlsx")
-discourse_posts_df = pd.read_excel("scraped_data/tds_discourse_posts.xlsx")
 
 # Retrieve custom_base_url from environment variable
 custom_base_url = os.environ.get("OPENAI_API_BASE_URL", "https://aipipe.org/openai/v1")
@@ -30,33 +25,6 @@ openai_api_key = os.environ.get("OPENAI_API_KEY")
 
 if not openai_api_key:
     raise ValueError("OPENAI_API_KEY environment variable not set.")
-
-# You don't need to set it again here if it's already in os.environ
-# os.environ["OPENAI_API_KEY"] = "YOUR_KEY_HERE" # REMOVE THIS LINE
-
-text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1000,
-    chunk_overlap=200,
-    length_function=len,
-    separators=["\n\n", "\n", " ", ""]
-)
-
-all_texts = []
-all_metadata = []
-
-for index, row in course_content_df.iterrows():
-    text = str(row['Main Article Content'])
-    chunks = text_splitter.split_text(text)
-    for i, chunk in enumerate(chunks):
-        all_texts.append(chunk)
-        all_metadata.append({"source": "course", "title": row.get('Title'), "url": row.get('URL')})
-
-for index, row in discourse_posts_df.iterrows():
-    text = str(row['Content'])
-    chunks = text_splitter.split_text(text)
-    for i, chunk in enumerate(chunks):
-        all_texts.append(chunk)
-        all_metadata.append({"source": "discourse", "post_id": row.get('Post ID'), "url": row.get('Post URL')})
 
 FAISS_INDEX_PATH = "faiss_index"
 
@@ -73,14 +41,7 @@ try:
         vectorstore = FAISS.load_local(FAISS_INDEX_PATH, embeddings, allow_dangerous_deserialization=True)
         print("FAISS index loaded successfully.")
     else:
-        print("FAISS index not found. Creating a new one...")
-        if all_texts:
-            vectorstore = FAISS.from_texts(all_texts, embeddings, metadatas=all_metadata)
-            vectorstore.save_local(FAISS_INDEX_PATH)
-            print(f"FAISS index created and saved to {FAISS_INDEX_PATH}.")
-        else:
-            vectorstore = None
-            print("No text data available to create FAISS index.")
+        raise FileNotFoundError("Faiss Index Not found! Pre-Build one!")
 
     retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
 except Exception as e:
