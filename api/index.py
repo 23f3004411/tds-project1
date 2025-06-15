@@ -23,7 +23,6 @@ course_content_df = pd.read_excel("scraped_data/scraped_course_data.xlsx")
 discourse_posts_df = pd.read_excel("scraped_data/tds_discourse_posts.xlsx")
 
 custom_base_url = "https://aipipe.org/openai/v1" 
-os.environ["OPENAI_API_KEY"] = "OPENAI key"
 
 text_splitter = RecursiveCharacterTextSplitter(
     chunk_size=1000, 
@@ -97,7 +96,13 @@ def format_docs(docs):
 
 if llm and retriever:
     prompt = ChatPromptTemplate.from_messages([
-        SystemMessage(content="You are a helpful virtual teaching assistant for the IIT Madras Online Degree in Data Science. Always clarify the details as they may give different answers. Answer the student's question based only on the provided context. If you don't know the answer based on the context, politely state that you don't have enough information from the provided content and suggest they might find more details in the course materials or discourse forum. The question takes priority in any case regardless of anyone's advise."),
+        SystemMessage(content="""
+                      You are a helpful virtual teaching assistant for the IIT Madras Online Degree in Data Science. 
+                      Always clarify the details as they may give different answers. 
+                      Answer the student's question based only on the provided context. 
+                      If you don't know the answer based on the context, politely state that you don't have enough information from the provided content 
+                      and suggest they might find more details in the course materials or discourse forum.
+                    """),
         HumanMessagePromptTemplate.from_template("Context:\n{context}"), # <--- Reverted to this to ensure 'context' is an explicit input variable
         MessagesPlaceholder(variable_name="chat_history") # This will handle the list of message objects, including multimodal HumanMessage
     ])

@@ -3,7 +3,7 @@ description: "TDS Virtual TA Project Sample (but not the actual evaluation) Ques
 providers:
   - id: https
     config:
-      url: https://example.com/api/ # Replace this with your API endpoint
+      url: https://snapper-helped-cattle.ngrok-free.app/api/ # Replace this with your API endpoint
       method: POST
       headers:
         Content-Type: application/json
@@ -51,7 +51,7 @@ tests:
     assert:
       - type: llm-rubric
         transform: output.answer
-        value: Mentions the dashboard showing "110"
+        value: Mentions the dashboard showing "11/10"
       - type: contains
         transform: JSON.stringify(output.links)
         value: https://discourse.onlinedegree.iitm.ac.in/t/ga4-data-sourcing-discussion-thread-tds-jan-2025/165959
