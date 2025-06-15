@@ -2,3 +2,7 @@
 __pycache__
 faiss_index
 launch.json
+new_venv
+req.txt
+req2.txt
+.vscode
