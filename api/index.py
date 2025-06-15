@@ -3,13 +3,11 @@ from typing import Optional, List
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from PIL import Image
 from operator import itemgetter
 
 # Langchain imports
 from langchain_community.vectorstores import FAISS
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, HumanMessagePromptTemplate
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -106,7 +104,6 @@ if llm and retriever:
 else:
     print("RAG chain could not be created due to missing LLM or Retriever.")
     retrieval_chain = None
-
 
 app = FastAPI(
     title="TDS Virtual TA API",
